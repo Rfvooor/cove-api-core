@@ -423,23 +423,27 @@ const Wallets = mysqlConnection.define<Wallet>('Wallets', {
 addLastAccessedHook(Wallets);
 
 const User = mysqlConnection.define('User', {
-    walletId: {
+    walletAddress: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
         primaryKey: true
     },
-    telegramId: {
+    apiKey: {
         type: DataTypes.STRING,
-        allowNull: true
-    }, 
+        allowNull: false,
+        unique: true
+    },
     creditBalance: {
         type: DataTypes.FLOAT,
         allowNull: false,
         defaultValue: 0
-    }, 
+    },
+    telegramId: {
+        type: DataTypes.STRING,
+        allowNull: true
+    }
 });
-
 
 export {
     Filters,

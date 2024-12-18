@@ -26,6 +26,17 @@ export async function fetchTransactionsAPI(req: Request, res: Response) {
 
         const data = await fetchTransactions(options);
 
+        const user = (req as any).user;
+        const creditCost = data.length * 0.01; // Adjust the credit cost based on the output size
+
+        if (user.creditBalance < creditCost) {
+            res.status(403).json({ error: 'Insufficient credits' });
+            return;
+        }
+
+        user.creditBalance -= creditCost;
+        await user.save();
+
         if (enrich === 'true') {
             const enrichedData = await enrichTransactions(data);
             res.json(enrichedData);

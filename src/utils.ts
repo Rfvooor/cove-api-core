@@ -1,6 +1,7 @@
 import moment from 'moment';
 import * as math from 'mathjs';
 import { Tokens } from '../ingress/database/mysql/models';
+import crypto from 'crypto';
 
 function formatToDecimalPlaces(num: number, decimalPlaces: number): string {
     return Number(num).toFixed(decimalPlaces);
@@ -545,6 +546,10 @@ function calculatePriceChange(initialPrice: number | null | undefined, currentPr
 
     // Round to 2 decimal places
     return Math.round(percentageChange * 100) / 100;
+};
+
+export const generateApiKey = (): string => {
+  return crypto.randomBytes(32).toString('hex');
 };
 
 export {
