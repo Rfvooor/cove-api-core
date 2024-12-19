@@ -1,14 +1,15 @@
 import { clickhouse } from '../../external/clickhouse';
-import { getTokenMappings } from '../../databaseUtils';
-import { parsePeriod } from '../../utils';
+import { getTokenMappings, getTokenMappingsByAddresses } from '../../utils/databaseUtils';
+import { parsePeriod } from '../../utils/utils';
 import { dediConnection } from '../../external/rpc';
 import { PublicKey } from '@solana/web3.js';
-import { getTokenMappingsByAddresses } from '../../databaseUtils';
 
 interface FetchTokenStatsOpts {
     debug?: boolean;
     minMarketCap?: number;
     maxMarketCap?: number;
+    minVolume?: number;
+    maxVolume?: number;
     minNetFlow?: number;
     maxNetFlow?: number;
     minPriceChange?: number;
@@ -29,7 +30,7 @@ interface FetchTokenStatsOpts {
     tokenRefs?: number[];
 }
 
-export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}): Promise<{
+interface TokenStats {
     address: string;
     netFlow: number;
     volume: number;
@@ -38,11 +39,15 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
     price: number;
     marketCap: number;
     priceChange: number;
-}[]> {
+}
+
+export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}): Promise<TokenStats[]> {
     const defaultOpts: FetchTokenStatsOpts = {
         debug: false,
         minMarketCap: 0,
         maxMarketCap: Infinity,
+        minVolume: 0,
+        maxVolume: Infinity,
         minNetFlow: 0,
         maxNetFlow: Infinity,
         minPriceChange: -Infinity,
@@ -62,11 +67,11 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
     opts = { ...defaultOpts, ...opts };
     if (opts.dexes && opts.dexes.length > 0) {
         const dexMappings = {
-            raydium: 0,
-            pump: 1,
-            jupiter: 2,
-        }
-        opts.dexKeys = opts.dexes.map(dex => dexMappings[dex]);
+            "raydium": 0,
+            "pump": 1,
+            "jupiter": 2,
+        } as const;
+        opts.dexKeys = opts.dexes.map(dex => dexMappings[dex as keyof typeof dexMappings]);
     }
     const startTimestamp = opts.startTimestamp || parsePeriod(opts.period || '5m');
     const endTimestamp = opts.endTimestamp || Math.floor(Date.now() / 1000);
@@ -192,31 +197,43 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
         }
     }
 
-    const rows = await result.json();
+    if (!result) {
+        throw new Error('Query failed after all retries');
+    }
+
+    const rows = await result.json() as any[];
     const tokenRefs = rows.map(row => parseInt(row.token)).filter(ref => ref !== 0);
     if (opts.debug) console.log('tokenRefs:', tokenRefs);
     const tokenMappings = await getTokenMappings(tokenRefs);
     if (opts.debug) console.log('tokenMappings:', tokenMappings);
 
+    const processedRows = await Promise.all(
+        rows
+            .filter(row => parseInt(row.token) !== 0)
+            .map(async row => {
+                const price = row.lastPrice;
+                const tokenRef = Number(row.token);
+                const tokenMapping = tokenMappings[tokenRef];
+                if (!tokenMapping) {
+                    throw new Error(`No token mapping found for token ref ${tokenRef}`);
+                }
+                const supply = await dediConnection.getTokenSupply(new PublicKey(tokenMapping.address));
+                const marketCap = price * (supply.value.uiAmount ?? 1_000_000_000);
 
-    return rows
-        .filter(row => parseInt(row.token) !== 0)
-        .map(async row => {
-            const price = row.lastPrice;
-            const supply = await dediConnection.getTokenSupply(new PublicKey(tokenMappings[row.token].address));
-            const marketCap = price * (supply.value.uiAmount ?? 1_000_000_000);
+                return {
+                    address: tokenMapping.address,
+                    netFlow: parseFloat(row.netFlow),
+                    volume: parseFloat(row.totalFlow),
+                    txCount: parseInt(row.txCount),
+                    uniqueMakers: parseInt(row.uniqueMakers),
+                    price,
+                    marketCap,
+                    priceChange: parseFloat(row.priceChange) || 0,
+                } as TokenStats;
+            })
+    );
 
-            return {
-                address: tokenMappings[row.token].address,
-                netFlow: parseFloat(row.netFlow),
-                volume: parseFloat(row.totalFlow),
-                txCount: parseInt(row.txCount),
-                uniqueMakers: parseInt(row.uniqueMakers),
-                price,
-                marketCap,
-                priceChange: parseFloat(row.priceChange) || 0,
-            };
-        })
+    return processedRows
         .filter(token => {
             if (opts.minMarketCap && token.marketCap < opts.minMarketCap) return false;
             if (opts.maxMarketCap && token.marketCap > opts.maxMarketCap) return false;
@@ -231,9 +248,8 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
             return true;
         })
         .sort((a, b) => {
-            // Sort by specified field
-            const aValue = a[opts.sortBy!];
-            const bValue = b[opts.sortBy!];
+            const aValue = a[opts.sortBy || 'volume'];
+            const bValue = b[opts.sortBy || 'volume'];
             const multiplier = opts.sortOrder === 'asc' ? 1 : -1;
             
             return (aValue - bValue) * multiplier;

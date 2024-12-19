@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/models';
-import { generateApiKey } from '../utils';
+import { generateApiKey } from '../utils/utils';
 
 export const generateApiKeyForUser = async (req: Request, res: Response) => {
   const { walletAddress } = req.body;

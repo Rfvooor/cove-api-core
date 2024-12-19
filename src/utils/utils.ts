@@ -1,6 +1,6 @@
 import moment from 'moment';
 import * as math from 'mathjs';
-import { Tokens } from '../ingress/database/mysql/models';
+import { Tokens } from '../models/models';
 import crypto from 'crypto';
 
 function formatToDecimalPlaces(num: number, decimalPlaces: number): string {

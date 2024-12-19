@@ -2,6 +2,11 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
 const rateLimits = {
+  1000: {
+    transactions: 60,
+    transactionsEnrich: 60,
+    tokensStats: 60,
+  },
   10000: {
     transactions: 100,
     transactionsEnrich: 50,
@@ -17,9 +22,12 @@ const rateLimits = {
     transactionsEnrich: 1000,
     tokensStats: 5000,
   },
-};
+} as const;
 
-export const rateLimiter = (apiName: keyof typeof rateLimits[keyof typeof rateLimits]) => {
+type RateLimitTier = keyof typeof rateLimits;
+type ApiEndpoint = keyof typeof rateLimits[RateLimitTier];
+
+export const rateLimiter = (apiName: ApiEndpoint) => {
   return (req: Request, res: Response, next: Function) => {
     const user = (req as any).user;
     const creditBalance = user.creditBalance;
@@ -31,6 +39,8 @@ export const rateLimiter = (apiName: keyof typeof rateLimits[keyof typeof rateLi
       limit = rateLimits[100000][apiName];
     } else if (creditBalance >= 10000) {
       limit = rateLimits[10000][apiName];
+    } else if (creditBalance >= 1000) {
+      limit = rateLimits[1000][apiName];
     }
 
     const limiter = rateLimit({
@@ -41,4 +51,4 @@ export const rateLimiter = (apiName: keyof typeof rateLimits[keyof typeof rateLi
 
     limiter(req, res, next);
   };
-}; 
+};

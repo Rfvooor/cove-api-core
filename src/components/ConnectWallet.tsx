@@ -1,98 +1,94 @@
 import React, { useState } from 'react';
-import { PublicKey, Transaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createBurnInstruction } from '@solana/spl-token';
+import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { useWallet } from '@solana/wallet-adapter-react';
 import axios from 'axios';
 import { dediConnection as connection } from '../external/rpc';
 
 const SPL_TOKEN_ADDRESS = 'DcU8uHn7abXgYL8AJUK3t8FckeAXrNcGYYBK7uBFpump';
+const COVE_TOKEN_AMOUNT = 100_000;
+
 
 const ConnectWallet: React.FC = () => {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey } = useWallet();
   const [apiKey, setApiKey] = useState('');
   const [credits, setCredits] = useState(0);
-  const [burnAmount, setBurnAmount] = useState(100);
+  const [hasEnoughTokens, setHasEnoughTokens] = useState(false);
 
-  const generateApiKey = async () => {
+  const checkTokenBalance = async () => {
     if (!publicKey) return;
-
-    try {
-      const response = await axios.post('/api/users/generate-key', { walletId: publicKey.toBase58() });
-      setApiKey(response.data.apiKey);
-      setCredits(response.data.credits);
-    } catch (error) {
-      console.error('Error generating API key:', error);
-    }
-  };
-
-  const burnTokens = async (amount: number) => {
-    if (!publicKey || !signTransaction) return;
-    if (amount <= 0 || amount > 1_000_000) {
-      console.error('Invalid burn amount. Must be between 1 and 1,000,000');
-      return;
-    }
 
     try {
       const userTokenAccount = await getAssociatedTokenAddress(
         new PublicKey(SPL_TOKEN_ADDRESS),
         publicKey
       );
-
-      const transaction = new Transaction().add(
-        createBurnInstruction(
-          userTokenAccount,
-          new PublicKey(SPL_TOKEN_ADDRESS),
-          publicKey,
-          amount,
-          []
-        )
-      );
-
-      const signedTransaction = await signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-      const bh = await connection.getLatestBlockhash();
-      const lastValidBlockHeight = bh.lastValidBlockHeight;
-      const blockhash = bh.blockhash;
-      const confirmation = await connection.confirmTransaction({signature, blockhash, lastValidBlockHeight}, 'confirmed');
-      if (!confirmation) {
-        console.error('Transaction confirmation failed');
-        return;
-      }
-
-      const response = await axios.post('/api/users/add-credits', {
-        walletAddress: publicKey.toBase58(),
-        credits: amount * 100,
-      });
-      setCredits(response.data.credits);
+      const tokenBalance = await connection.getTokenAccountBalance(userTokenAccount);
+      setHasEnoughTokens(tokenBalance.value.uiAmount ? tokenBalance.value.uiAmount >= COVE_TOKEN_AMOUNT : false);
     } catch (error) {
-      console.error('Error burning tokens:', error);
+      console.error('Error checking token balance:', error);
+      setHasEnoughTokens(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (publicKey) {
+      checkTokenBalance();
+    }
+  }, [publicKey]);
+
+  const generateApiKey = async () => {
+    if (!publicKey || !hasEnoughTokens) return;
+
+    try {
+      const response = await axios.post('/api/users/generate-key', { walletId: publicKey.toBase58() });
+      setApiKey(response.data.apiKey);
+      setCredits(1000);
+    } catch (error) {
+      console.error('Error generating API key:', error);
     }
   };
 
   return (
-    <div>
+    <div className="list-container">
+      <h2>[ SYSTEM: API CONNECTION ]</h2>
       {publicKey ? (
-        <div>
-          <p>Connected Wallet: {publicKey.toBase58()}</p>
-          {apiKey ? (
-            <div>
-              <p>API Key: {apiKey}</p>
-              <p>Credits: {credits}</p>
-              <input 
-                type="number"
-                min="1"
-                max="1000000"
-                value={burnAmount}
-                onChange={(e) => setBurnAmount(parseInt(e.target.value))}
-              />
-              <button onClick={() => burnTokens(burnAmount)}>Burn Tokens</button>
-            </div>
-          ) : (
-            <button onClick={generateApiKey}>Generate API Key</button>
-          )}
+        <div className="wallet-card">
+          <div className="wallet-info">
+            <p className="wallet-address">Connected: {publicKey.toBase58()}</p>
+            {hasEnoughTokens ? (
+              apiKey ? (
+                <div>
+                  <p className="token-list">API Key: {apiKey}</p>
+                  <p className="token-list">Credits: {credits}</p>
+                </div>
+              ) : (
+                <button 
+                  onClick={generateApiKey}
+                  style={{
+                    background: '#4CAF50',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '8px 16px',
+                    color: '#f0f0f0',
+                    cursor: 'pointer',
+                    marginTop: '10px'
+                  }}
+                >
+                  Generate API Key
+                </button>
+              )
+            ) : (
+              <p className="token-list" style={{color: '#ff9800'}}>
+                Insufficient COVE tokens. You need at least 100,000 COVE to generate an API key.
+              </p>
+            )}
+          </div>
         </div>
       ) : (
-        <p>Please connect your wallet</p>
+        <p style={{color: '#f0f0f0', fontFamily: 'Courier New, monospace'}}>
+          Please connect your wallet to continue...
+        </p>
       )}
     </div>
   );
