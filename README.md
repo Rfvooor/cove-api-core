@@ -66,6 +66,8 @@ To add credits to your account, make a POST request to `/api/users/add-credits` 
 - `walletAddress`: Your wallet address.
 - `credits`: The number of credits to add.
 
+Credits can be bought at the rate of 1 $COVE = 100 credits. 
+
 Each API request consumes a certain amount of credits based on the endpoint and the size of the response data. Make sure you have sufficient credits before making API requests.
 
 ## Error Handling
@@ -78,3 +80,5 @@ The API endpoints may return the following error responses:
 - `500 Internal Server Error`: An unexpected error occurred while processing the request.
 
 Please make sure to handle these error responses appropriately in your client application. 
+
+EVERYTHING IS SUBJECT TO CHANGE
