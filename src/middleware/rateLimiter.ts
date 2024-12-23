@@ -49,6 +49,6 @@ export const rateLimiter = (apiName: ApiEndpoint) => {
       message: 'Too many requests, please try again later.',
     });
 
-    limiter(req, res, next);
+    limiter(req, res, next as any);
   };
 };

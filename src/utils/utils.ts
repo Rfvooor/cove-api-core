@@ -195,8 +195,8 @@ function parsePeriod(period: string): number {
  */
 function calculateKurtosis(data: number[]): number {
     const n = data.length;
-    const mean = math.mean(data);
-    const variance = math.variance(data);
+    const mean = data.reduce((acc, val) => acc + val, 0) / n;
+    const variance = data.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / n;
     const numerator = data.reduce((acc, val) => acc + Math.pow(val - mean, 4), 0);
     return (n * (n + 1) / ((n - 1) * (n - 2) * (n - 3))) * (numerator / Math.pow(variance, 2)) - 3 * (n - 1) ** 2 / ((n - 2) * (n - 3));
 }
@@ -208,8 +208,8 @@ function calculateKurtosis(data: number[]): number {
  */
 function calculateSkewness(data: number[]): number {
     const n = data.length;
-    const mean = math.mean(data);
-    const variance = math.variance(data);
+    const mean = data.reduce((acc, val) => acc + val, 0) / n;
+    const variance = data.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / n;
     const numerator = data.reduce((acc, val) => acc + Math.pow(val - mean, 3), 0);
     return (n / ((n - 1) * (n - 2))) * (numerator / Math.pow(variance, 1.5));
 }
@@ -382,13 +382,13 @@ function calculateStats(values: number[]): CalculatedStats {
         const quartile3 = math.median(sortedValues.slice(Math.ceil(sortedValues.length / 2)));
         const mean = math.mean(values);
         const stdDev = math.std(values);
-        const cvValue = stdDev / mean; // Coefficient of Variation (CV) value
+        const cvValue = Number(stdDev) / mean; // Coefficient of Variation (CV) value 
         const entropy = calculateEntropy(values); // Assuming calculateEntropy is defined elsewhere
         const change = values[values.length - 1] - values[0]; // Change from first to last value
         const rateOfChange = change / values[0]; // Rate of change from first to last value
         return {
             avg: mean,
-            std: stdDev,
+            std: Number(stdDev), // Convert to number to fix type error
             med: math.median(values),
             kurt: calculateKurtosis(values),
             skew: calculateSkewness(values),

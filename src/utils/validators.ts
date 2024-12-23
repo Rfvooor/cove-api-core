@@ -65,10 +65,4 @@ function validateTokens(tokens: string[]): boolean {
     return validateAddresses(tokens);
 }
 
-module.exports = {
-    validateTimestamps,
-    validatePeriod,
-    validateDexes,
-    validateAddresses,
-    validateTokens
-}; 
+export { validatePeriod, validateTimestamps, validateDexes, validateTokens, validateAddresses };
