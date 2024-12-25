@@ -37,6 +37,14 @@ export const getTokenMappingsByAddresses = async (addresses: string[]) => {
         }, {});
     });
 };
+export const getTokenMappingByAddress = async (address: string) => {
+    return await retryAsync(async () => {
+        const token = await Tokens.findOne({
+            where: { address },
+        });
+        return token ? { address: token.address, tokenSupply: Number(token.tokenSupply), bundleAmt: Number(token.bundleAmt), id: Number(token.id) } : null;
+    });
+};
 
 export const getWalletMappings = async (uniqueRefs: number[]) => {
     return await retryAsync(async () => {

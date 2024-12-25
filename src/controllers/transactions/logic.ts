@@ -25,17 +25,20 @@ export async function enrichTransactionsWithAddresses(data: any) {
 
     return data;
 }
+const defaultFields = ['swapTime', 'swapValueUSD', 'swapAmountIn', 'swapAmountOut', 'tokenInRef', 'tokenOutRef', 'addressRef', 'dexKey', 'txnHash', 'slot'];
 
 export async function fetchTransactions(opts: {
     startTimestamp?: number;
     endTimestamp?: number;
     period?: string;
     dexKeys?: number[];
+    fields?: string[];
 }) {
   // Parse and validate inputs
   let parsedStartTimestamp = opts.startTimestamp ? opts.startTimestamp : null;
   let parsedEndTimestamp = opts.endTimestamp ? opts.endTimestamp : null;
   const parsedDexKeys = opts.dexKeys ? (Array.isArray(opts.dexKeys) ? opts.dexKeys : [opts.dexKeys]) : [1];
+  const fields = opts.fields || defaultFields;
 
   // Calculate timestamps based on the period, if provided
   if (opts.period && (!parsedStartTimestamp || !parsedEndTimestamp)) {
@@ -74,14 +77,7 @@ export async function fetchTransactions(opts: {
 
   const swapsQuery = `
       SELECT 
-          swapTime,
-          swapValueUSD,
-          swapAmountIn, 
-          swapAmountOut,
-          tokenInRef,
-          tokenOutRef,
-          addressRef,
-          dexKey
+          ${fields.join(',')}
       FROM swaps
       WHERE swapTime BETWEEN ${parsedStartTimestamp} AND ${parsedEndTimestamp}
       AND dexKey IN (${parsedDexKeys.join(',')});`;
@@ -105,6 +101,7 @@ export async function fetchTransactionsByAddresses(opts: {
     endTimestamp?: number;
     period?: string;
     dexKeys?: number[];
+    fields?: string[];
 }) {
   if (!opts.addresses || !Array.isArray(opts.addresses) || opts.addresses.length === 0) {
     throw new Error("Addresses array is required and cannot be empty");
@@ -114,6 +111,7 @@ export async function fetchTransactionsByAddresses(opts: {
   let parsedStartTimestamp = opts.startTimestamp ? opts.startTimestamp : null;
   let parsedEndTimestamp = opts.endTimestamp ? opts.endTimestamp : null;
   const parsedDexKeys = opts.dexKeys ? (Array.isArray(opts.dexKeys) ? opts.dexKeys : [opts.dexKeys]) : [1];
+  const fields = opts.fields || defaultFields;
 
   // Get address refs
   const wallets = await Wallets.findAll({
@@ -165,14 +163,7 @@ export async function fetchTransactionsByAddresses(opts: {
 
   const swapsQuery = `
       SELECT 
-          swapTime,
-          swapValueUSD,
-          swapAmountIn, 
-          swapAmountOut,
-          tokenInRef,
-          tokenOutRef,
-          addressRef,
-          dexKey
+          ${fields.join(',')}
       FROM swaps
       WHERE swapTime BETWEEN ${parsedStartTimestamp} AND ${parsedEndTimestamp}
       AND dexKey IN (${parsedDexKeys.join(',')})
@@ -197,6 +188,7 @@ export async function fetchTransactionsByToken(opts: {
     endTimestamp?: number;
     period?: string;
     dexKeys?: number[];
+    fields?: string[];
 }) {
   if (!opts.tokenAddresses || !Array.isArray(opts.tokenAddresses) || opts.tokenAddresses.length === 0) {
     throw new Error("Token addresses array is required and cannot be empty");
@@ -206,6 +198,7 @@ export async function fetchTransactionsByToken(opts: {
   let parsedStartTimestamp = opts.startTimestamp ? opts.startTimestamp : null;
   let parsedEndTimestamp = opts.endTimestamp ? opts.endTimestamp : null;
   const parsedDexKeys = opts.dexKeys ? (Array.isArray(opts.dexKeys) ? opts.dexKeys : [opts.dexKeys]) : [1];
+  const fields = opts.fields || defaultFields;
 
   // Get token ref
   const tokens = await Tokens.findAll({
@@ -257,7 +250,7 @@ export async function fetchTransactionsByToken(opts: {
 
   const swapsQuery = `
       SELECT DISTINCT
-          addressRef
+          ${fields.join(',')}
       FROM swaps
       WHERE swapTime BETWEEN ${parsedStartTimestamp} AND ${parsedEndTimestamp}
       AND dexKey IN (${parsedDexKeys.join(',')})
@@ -283,6 +276,7 @@ export async function fetchTransactionsByTokensAndAddresses(opts: {
     endTimestamp?: number;
     period?: string;
     dexKeys?: number[];
+    fields?: string[];
 }) {
   if (!opts.tokens || !Array.isArray(opts.tokens) || opts.tokens.length === 0) {
     throw new Error("Tokens array is required and cannot be empty");
@@ -296,6 +290,7 @@ export async function fetchTransactionsByTokensAndAddresses(opts: {
   let parsedStartTimestamp = opts.startTimestamp ? opts.startTimestamp : null;
   let parsedEndTimestamp = opts.endTimestamp ? opts.endTimestamp : null;
   const parsedDexKeys = opts.dexKeys ? (Array.isArray(opts.dexKeys) ? opts.dexKeys : [opts.dexKeys]) : [1];
+  const fields = opts.fields || defaultFields;
 
   // Get token and address refs
   const tokens = await Tokens.findAll({
@@ -356,14 +351,7 @@ export async function fetchTransactionsByTokensAndAddresses(opts: {
 
   const swapsQuery = `
       SELECT 
-          swapTime,
-          swapValueUSD,
-          swapAmountIn, 
-          swapAmountOut,
-          tokenInRef,
-          tokenOutRef,
-          addressRef,
-          dexKey
+          ${fields.join(',')}
       FROM swaps
       WHERE swapTime BETWEEN ${parsedStartTimestamp} AND ${parsedEndTimestamp}
       AND dexKey IN (${parsedDexKeys.join(',')})

@@ -46,7 +46,7 @@ export async function fetchWalletStats(opts: FetchWalletStatsOpts = {debug: fals
     const defaultOpts: FetchWalletStatsOpts = {
         debug: false,
         period: '5m',
-        dexes: ['raydium', 'jupiter', 'pump'],
+        dexes: ['raydium', 'jupiter', 'pump', 'moonshot', 'meteora', 'orca'],
         includeSwaps: true,
         includeTopTokens: true,
         sortBy: 'volume',
@@ -60,6 +60,9 @@ export async function fetchWalletStats(opts: FetchWalletStatsOpts = {debug: fals
             "raydium": 0,
             "pump": 1,
             "jupiter": 2,
+            "moonshot": 3,
+            "meteora": 4,
+            "orca": 5,
         } as const;
         opts.dexKeys = opts.dexes.map(dex => dexMappings[dex as keyof typeof dexMappings]);
     }
@@ -193,7 +196,7 @@ export async function fetchWalletStats(opts: FetchWalletStatsOpts = {debug: fals
                 amountIn: parseFloat(swap.amountIn),
                 amountOut: parseFloat(swap.amountOut),
                 valueUSD: parseFloat(swap.valueUSD),
-                dex: ['raydium', 'pump', 'jupiter'][swap.dexKey]
+                dex: ['raydium', 'pump', 'jupiter', 'moonshot', 'meteora', 'orca'][swap.dexKey]
             }));
         }
 

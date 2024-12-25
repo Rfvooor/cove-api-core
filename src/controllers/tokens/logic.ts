@@ -1,7 +1,7 @@
 import { clickhouse } from '../../external/clickhouse';
-import { getTokenMappings, getTokenMappingsByAddresses } from '../../utils/databaseUtils';
+import { getTokenMappingByAddress, getTokenMappings, getTokenMappingsByAddresses } from '../../utils/databaseUtils';
 import { parsePeriod } from '../../utils/utils';
-import { dediConnection } from '../../external/rpc';
+import { chainstackConnection1 as connection } from '../../external/rpc';
 import { PublicKey } from '@solana/web3.js';
 
 interface FetchTokenStatsOpts {
@@ -89,8 +89,6 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
                 count(DISTINCT addressRef) as uniqueBuyers
             FROM swaps 
             WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenInRef=1
-                AND tokenOutRef!=1
                 ${opts.dexKeys ? `AND dexKey IN (${opts.dexKeys.join(',')})` : ''}
                 ${opts.tokenRefs ? `AND tokenOutRef IN (${opts.tokenRefs.join(',')})` : ''}
             GROUP BY token
@@ -103,63 +101,45 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
                 count(DISTINCT addressRef) as uniqueSellers
             FROM swaps
             WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenOutRef=1
-                AND tokenInRef!=1
                 ${opts.dexKeys ? `AND dexKey IN (${opts.dexKeys.join(',')})` : ''}
                 ${opts.tokenRefs ? `AND tokenInRef IN (${opts.tokenRefs.join(',')})` : ''}
             GROUP BY token
         ),
         first_prices AS (
-            SELECT
+            SELECT DISTINCT ON (token)
                 token,
                 firstPrice
             FROM (
                 SELECT
                     tokenOutRef as token,
-                    argMin(swapValueUSD/swapAmountOut, swapTime) as firstPrice,
-                    'out' as type
+                    MIN(swapValueUSD/swapAmountOut) OVER (PARTITION BY tokenOutRef ORDER BY swapTime) as firstPrice
                 FROM swaps
                 WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenOutRef!=1
-                GROUP BY token
                 UNION ALL
                 SELECT 
                     tokenInRef as token,
-                    argMin(swapValueUSD/swapAmountIn, swapTime) as firstPrice,
-                    'in' as type
+                    MIN(swapValueUSD/swapAmountIn) OVER (PARTITION BY tokenInRef ORDER BY swapTime) as firstPrice
                 FROM swaps
                 WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenInRef!=1
-                GROUP BY token
-            )
-            GROUP BY token
-            HAVING argMin(type, firstPrice) = type
+            ) prices
         ),
         last_prices AS (
-            SELECT
+            SELECT DISTINCT ON (token)
                 token,
                 lastPrice
             FROM (
                 SELECT
                     tokenOutRef as token,
-                    argMax(swapValueUSD/swapAmountOut, swapTime) as lastPrice,
-                    'out' as type
+                    MAX(swapValueUSD/swapAmountOut) OVER (PARTITION BY tokenOutRef ORDER BY swapTime DESC) as lastPrice
                 FROM swaps
                 WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenOutRef!=1
-                GROUP BY token
                 UNION ALL
                 SELECT
                     tokenInRef as token,
-                    argMax(swapValueUSD/swapAmountIn, swapTime) as lastPrice,
-                    'in' as type
+                    MAX(swapValueUSD/swapAmountIn) OVER (PARTITION BY tokenInRef ORDER BY swapTime DESC) as lastPrice
                 FROM swaps
                 WHERE swapTime >= ${startTimestamp} AND swapTime <= ${endTimestamp}
-                AND tokenInRef!=1
-                GROUP BY token
-            )
-            GROUP BY token
-            HAVING argMax(type, lastPrice) = type
+            ) prices
         )
         SELECT
             COALESCE(buys.token, sells.token) AS token,
@@ -167,12 +147,19 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
             COALESCE(buyFlow, 0) + COALESCE(sellFlow, 0) AS totalFlow,
             COALESCE(buyCount, 0) + COALESCE(sellCount, 0) AS txCount,
             COALESCE(uniqueBuyers, 0) + COALESCE(uniqueSellers, 0) AS uniqueMakers,
-            ((last_prices.lastPrice - first_prices.firstPrice) / first_prices.firstPrice) * 100 as priceChange
+            ((last_prices.lastPrice - first_prices.firstPrice) / first_prices.firstPrice) * 100 as priceChange,
+            last_prices.lastPrice as price
         FROM buys
         FULL OUTER JOIN sells ON buys.token = sells.token
-        LEFT JOIN first_prices ON buys.token = first_prices.token
-        LEFT JOIN last_prices ON buys.token = last_prices.token
-        ORDER BY ${opts.sortBy ? `${opts.sortBy} ${opts.sortOrder || 'desc'}` : 'abs(COALESCE(buyFlow, 0) - COALESCE(sellFlow, 0)) DESC'}
+        LEFT JOIN first_prices ON COALESCE(buys.token, sells.token) = first_prices.token
+        LEFT JOIN last_prices ON COALESCE(buys.token, sells.token) = last_prices.token
+        WHERE COALESCE(buys.token, sells.token) NOT IN (2, 16)
+        ${opts.sortBy ? 
+            opts.sortBy === 'volume' ? 
+                `ORDER BY totalFlow ${opts.sortOrder || 'desc'}` :
+                `ORDER BY ${opts.sortBy} ${opts.sortOrder || 'desc'}`
+            : 'ORDER BY abs(netFlow) DESC'
+        }
         LIMIT ${opts.limit || 100}
     `;
     if (opts.debug) console.log('Query:', query);
@@ -211,14 +198,18 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
         rows
             .filter(row => parseInt(row.token) !== 0)
             .map(async row => {
-                const price = row.lastPrice;
+                const price = row.price;
                 const tokenRef = Number(row.token);
                 const tokenMapping = tokenMappings[tokenRef];
                 if (!tokenMapping) {
                     throw new Error(`No token mapping found for token ref ${tokenRef}`);
                 }
-                const supply = await dediConnection.getTokenSupply(new PublicKey(tokenMapping.address));
-                const marketCap = price * (supply.value.uiAmount ?? 1_000_000_000);
+                let supply = tokenMapping.tokenSupply;
+                if (!supply) {
+                    const supplyResponse = await connection.getTokenSupply(new PublicKey(tokenMapping.address));
+                    supply = supplyResponse.value.uiAmount ?? 1_000_000_000;
+                }
+                const marketCap = price * supply;
 
                 return {
                     address: tokenMapping.address,
@@ -246,12 +237,97 @@ export async function fetchTokenStats(opts: FetchTokenStatsOpts = {debug: false}
             if (opts.minUniqueMakers && token.uniqueMakers < opts.minUniqueMakers) return false;
             if (opts.maxUniqueMakers && token.uniqueMakers > opts.maxUniqueMakers) return false;
             return true;
-        })
-        .sort((a, b) => {
-            const aValue = a[opts.sortBy || 'volume'];
-            const bValue = b[opts.sortBy || 'volume'];
-            const multiplier = opts.sortOrder === 'asc' ? 1 : -1;
-            
-            return (aValue - bValue) * multiplier;
         });
+}
+
+interface OHLCVResponse {
+    success: boolean;
+    data: {
+        items: {
+            timestamp: number;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            volume: number;
+            netFlow: number;
+        }[];
+    };
+}
+
+export async function fetchTokenOHLCV(
+    tokenAddress: string, 
+    timeFrom: number,
+    timeTo: number,
+    period: string = '15m'
+): Promise<OHLCVResponse> {
+    // Parse period into seconds
+    const periodMatch = period.match(/(\d+)([smhd])/);
+    if (!periodMatch) throw new Error('Invalid period format');
+    
+    const value = parseInt(periodMatch[1]);
+    const unit = periodMatch[2];
+    const unitToSeconds: { [key: string]: number } = {
+        's': 1,
+        'm': 60,
+        'h': 3600,
+        'd': 86400
+    };
+    const intervalSeconds = value * unitToSeconds[unit];
+
+    const query = `
+        WITH prices AS (
+            SELECT 
+                swapTime,
+                if(tokenInRef = {tokenRef:UInt32}, 
+                    swapValueUSD / swapAmountIn,
+                    swapValueUSD / swapAmountOut
+                ) as price,
+                swapValueUSD as volume,
+                if(tokenInRef = {tokenRef:UInt32}, 
+                    -swapAmountIn,
+                    swapAmountOut
+                ) as flow
+            FROM swaps
+            WHERE (tokenInRef = {tokenRef:UInt32} OR tokenOutRef = {tokenRef:UInt32})
+                AND swapTime >= fromUnixTimestamp({timeFrom:UInt32})
+                AND swapTime <= fromUnixTimestamp({timeTo:UInt32})
+        )
+        SELECT 
+            toUnixTimestamp(toStartOfInterval(swapTime, INTERVAL {interval:UInt32} second)) as timestamp,
+            any(price) as open,
+            max(price) as high,
+            min(price) as low,
+            anyLast(price) as close,
+            sum(volume) as volume,
+            sum(flow) as netFlow
+        FROM prices
+        GROUP BY timestamp
+        ORDER BY timestamp ASC
+    `;
+
+    const rows = await (await clickhouse.query({
+        query,
+        query_params: {
+            tokenRef: Number(tokenAddress),
+            timeFrom,
+            timeTo,
+            interval: intervalSeconds
+        }
+    })).json();
+
+    return {
+        success: true,
+        data: {
+            items: Array.isArray(rows) ? rows.map(row => ({
+                timestamp: parseInt(row.timestamp),
+                open: parseFloat(row.open),
+                high: parseFloat(row.high),
+                low: parseFloat(row.low),
+                close: parseFloat(row.close),
+                volume: parseFloat(row.volume),
+                netFlow: parseFloat(row.netFlow)
+            })) : []
+        }
+    };
 }

@@ -1,8 +1,8 @@
 import express from 'express';
 import { fetchTransactionsAPI, enrichTransactionsAPI } from '../controllers/transactions/transactionsController';
-import { fetchTokenStatsAPI } from '../controllers/tokens/tokens';
+import { fetchTokenStatsAPI, fetchTokenOHLCVAPI } from '../controllers/tokens/tokens';
 import { generateApiKeyForUser, addCreditsToUser, verifyApiKey } from '../controllers/users';
-import { rateLimiter } from '../middleware/rateLimiter';
+import { fetchWalletStatsAPI } from '../controllers/wallets/wallets';
 
 const router = express.Router();
 
@@ -11,8 +11,10 @@ router.post('/users/add-credits', addCreditsToUser);
 
 router.use(verifyApiKey);
 
-router.get('/transactions', rateLimiter('transactions'), fetchTransactionsAPI);
-router.post('/transactions/enrich', rateLimiter('transactionsEnrich'), enrichTransactionsAPI);
-router.get('/tokens/stats', rateLimiter('tokensStats'), fetchTokenStatsAPI);
+router.get('/transactions', fetchTransactionsAPI);
+router.post('/transactions/enrich', enrichTransactionsAPI);
+router.get('/tokens/stats', fetchTokenStatsAPI);
+router.get('/tokens/ohlcv', fetchTokenOHLCVAPI);
+router.get('/wallets/stats', fetchWalletStatsAPI);
 
 export default router; 

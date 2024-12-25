@@ -41,10 +41,9 @@ export const addCreditsToUser = async (req: Request, res: Response) => {
 
 export const verifyApiKey = async (req: Request, res: Response, next: NextFunction) => {
   const apiKey = req.headers['x-api-key'];
-
   if (!apiKey) {
     res.status(401).json({ error: 'API key is missing' });
-    return;
+    return true;
   }
 
   try {

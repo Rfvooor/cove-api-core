@@ -8,7 +8,7 @@ export async function fetchWalletStatsAPI(req: Request, res: Response) {
             period = '5m',
             startTimestamp,
             endTimestamp,
-            dexes = ['raydium', 'pump', 'jupiter'],
+            dexes='raydium,pump,jupiter',
             walletAddresses,
             walletRefs,
             tokenAddresses,
@@ -18,7 +18,6 @@ export async function fetchWalletStatsAPI(req: Request, res: Response) {
             sortBy,
             sortOrder = 'desc'
         } = req.query;
-
         // Validate inputs
         if (!validatePeriod(period as string)) {
             return res.status(400).json({ error: 'Invalid period format' });
@@ -32,7 +31,7 @@ export async function fetchWalletStatsAPI(req: Request, res: Response) {
             return res.status(400).json({ error: 'Invalid end timestamp' });
         }
 
-        if (!validateDexes(dexes as string[])) {
+        if (dexes && !validateDexes(dexes as string)) {
             return res.status(400).json({ error: 'Invalid dex values' });
         }
 
@@ -52,7 +51,7 @@ export async function fetchWalletStatsAPI(req: Request, res: Response) {
             period: period as string,
             startTimestamp: startTimestamp ? Number(startTimestamp) : undefined,
             endTimestamp: endTimestamp ? Number(endTimestamp) : undefined,
-            dexes: dexes ? (dexes as string).split(',') : undefined,
+            dexes: dexes ? (dexes as string).split(',') : ['raydium', 'pump', 'jupiter'],
             walletAddresses: walletAddresses ? (walletAddresses as string).split(',') : undefined,
             walletRefs: walletRefs ? (walletRefs as string).split(',').map(Number) : undefined,
             tokenAddresses: tokenAddresses ? (tokenAddresses as string).split(',') : undefined,

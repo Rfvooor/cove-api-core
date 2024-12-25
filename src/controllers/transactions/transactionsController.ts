@@ -13,7 +13,7 @@ export async function fetchTransactionsAPI(req: Request, res: Response) {
             addresses,
             tokens
         } = req.query;
-
+        const parsedDexes = dexes ? JSON.parse(dexes as string) : undefined;
         // Validate inputs
         if (!validatePeriod(period as string)) {
             return res.status(400).json({ error: 'Invalid period format' });
@@ -27,7 +27,7 @@ export async function fetchTransactionsAPI(req: Request, res: Response) {
             return res.status(400).json({ error: 'Invalid end timestamp' });
         }
 
-        if (!validateDexes(dexes as string[])) {
+        if (!validateDexes(parsedDexes)) {
             return res.status(400).json({ error: 'Invalid dex values' });
         }
 
@@ -41,7 +41,7 @@ export async function fetchTransactionsAPI(req: Request, res: Response) {
             startTimestamp: startTimestamp ? Number(startTimestamp) : undefined,
             endTimestamp: endTimestamp ? Number(endTimestamp) : undefined,
             period: period as string,
-            dexKeys: dexes ? (dexes as string).split(',').map(dex => dexMappings[dex as keyof typeof dexMappings]) : [0,1,2]
+            dexKeys: dexes ? (parsedDexes as string).split(',').map(dex => dexMappings[dex as keyof typeof dexMappings]) : [0,1,2]
         };
 
         let data: any[] = [];

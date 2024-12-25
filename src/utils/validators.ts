@@ -39,14 +39,11 @@ function validatePeriod(period: string): boolean {
     }
 }
 
-function validateDexes(dexes: string[]): boolean {
-    // Check if dexes is array and has valid values
-    if (!Array.isArray(dexes)) {
-        return false;
-    }
-
-    const validDexes = ['raydium', 'pump', 'jupiter'];
-    return dexes.every(dex => validDexes.includes(dex));
+function validateDexes(dexes: string): boolean {
+    // Check if dexes is comma-separated string and has valid values
+    const dexArray = dexes.split(',');
+    const validDexes = ['raydium', 'pump', 'jupiter', 'orca', 'meteora', 'moonshot'];
+    return dexArray.every(dex => validDexes.includes(dex));
 }
 
 function validateAddresses(addresses: string[]): boolean {
